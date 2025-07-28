@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var rateLimiter = Time.tick(1 * Time.second);
+var rateLimiter = time.Tick(1 * time.Second);
 
 func Crawl(url string, depth int, wg *sync.WaitGroup) {
 	defer wg.Done()
