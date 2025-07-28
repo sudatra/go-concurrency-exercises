@@ -11,6 +11,7 @@ package main
 import (
 	"container/list"
 	"testing"
+	"sync"
 )
 
 // CacheSize determines how big the cache can grow
@@ -32,6 +33,7 @@ type KeyStoreCache struct {
 	cache map[string]*list.Element
 	pages list.List
 	load  func(string) string
+	rwMU  sync.RWMutex
 }
 
 // New creates a new KeyStoreCache
@@ -39,15 +41,29 @@ func New(load KeyStoreCacheLoader) *KeyStoreCache {
 	return &KeyStoreCache{
 		load:  load.Load,
 		cache: make(map[string]*list.Element),
+		pages: *list.New(),
 	}
 }
 
 // Get gets the key from cache, loads it from the source if needed
 func (k *KeyStoreCache) Get(key string) string {
+	k.rwMU.RLock();
+
 	if e, ok := k.cache[key]; ok {
-		k.pages.MoveToFront(e)
-		return e.Value.(page).Value
+		k.rwMU.RUnlock();
+		k.rwMU.Lock();
+
+		k.pages.MoveToFront(e);
+		val := e.Value.(page).Value;
+		k.rwMU.Unlock();
+
+		return val;
 	}
+	k.rwMU.RUnlock();
+
+	k.rwMU.Lock();
+	defer k.rwMU.Unlock();
+
 	// Miss - load from database and save it in cache
 	p := page{key, k.load(key)}
 	// if cache is full remove the least used item
