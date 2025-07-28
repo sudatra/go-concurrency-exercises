@@ -13,27 +13,31 @@ import (
 	"time"
 )
 
-func producer(stream Stream, tweets chan <- *Tweet) {
-	for {
-		tweet, err := stream.Next()
-		if err == ErrEOF {
-			return tweets
-		}
+func producer(stream Stream, tweets chan<- *Tweet) {
+    defer func() {
+        close(tweets);
+    }()
 
-		tweets <- tweet;
-	}
+    for {
+        tweet, err := stream.Next();
+        if err == ErrEOF {
+            return;
+        }
+
+        tweets <- tweet;
+    }
 }
 
-func consumer(tweets <- chan *Tweet, done chan <- struct{}) {
-	for _, t := range tweets {
-		if t.IsTalkingAboutGo() {
-			fmt.Println(t.Username, "\ttweets about golang")
-		} else {
-			fmt.Println(t.Username, "\tdoes not tweet about golang")
-		}
-	}
+func consumer(tweets <-chan *Tweet, done chan<- struct{}) {
+    for t := range tweets {
+        if t.IsTalkingAboutGo() {
+            fmt.Println(t.Username, "\ttweets about golang")
+        } else {
+            fmt.Println(t.Username, "\tdoes not tweet about golang")
+        }
+    }
 
-	done <- {}{};
+    done <- struct{}{};
 }
 
 func main() {
@@ -41,8 +45,8 @@ func main() {
 	stream := GetMockStream()
 
 	// channels
-	tweetsChannel = make(chan *Tweet, 100);
-	doneChannel = make(chan struct{});
+	tweetsChannel := make(chan *Tweet, 100);
+	doneChannel := make(chan struct{});
 
 	// Producer
 	go producer(stream, tweetsChannel);
