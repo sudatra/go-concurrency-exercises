@@ -13,10 +13,35 @@
 
 package main
 
+import (
+	"os"
+	"os/signal"
+	"syscall"
+)
+
 func main() {
 	// Create a process
 	proc := MockProcess{}
 
-	// Run the process (blocking)
-	proc.Run()
+	sigChan := make(chan os.Signal, 1);
+	signal.Notify(sigChan, syscall.SIGINT);
+
+	firstSigIntReceived := false;
+
+	// process run (Non-blocking)
+	go proc.Run();
+
+	for {
+		select {
+		case sig := <-sigChan:
+			if sig == syscall.SIGINT {
+				if !firstSigIntReceived {
+					firstSigIntReceived = true;
+					go proc.Stop();
+				} else {
+					os.Exit(0);
+				}
+			}
+		}
+	}
 }
