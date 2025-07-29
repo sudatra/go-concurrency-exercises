@@ -91,14 +91,15 @@ func (m *SessionManager) UpdateSessionData(sessionID string, data map[string]int
 	m.mu.Lock();
 	defer m.mu.Unlock();
 
-	session, ok := m.sessions[sessionID]
+	_, ok := m.sessions[sessionID]
 	if !ok {
 		return ErrSessionNotFound
 	}
 
-	session.Data = data;
-	session.LastAccessTime = time.Now();
-	m.sessions[sessionID] = session;
+	m.sessions[sessionID] = Session{
+		Data: data,
+		LastAccessTime: time.Now(),
+	}
 
 	return nil
 }
