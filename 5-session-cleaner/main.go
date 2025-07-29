@@ -20,24 +20,32 @@ package main
 import (
 	"errors"
 	"log"
+	"sync"
+	"time"
 )
 
 // SessionManager keeps track of all sessions from creation, updating
 // to destroying.
 type SessionManager struct {
 	sessions map[string]Session
+	mu 		 sync.RWMutex
+	stopChan chan struct{}
 }
 
 // Session stores the session's data
 type Session struct {
 	Data map[string]interface{}
+	LastAccessTime time.Time
 }
 
 // NewSessionManager creates a new sessionManager
 func NewSessionManager() *SessionManager {
 	m := &SessionManager{
 		sessions: make(map[string]Session),
+		stopChan: make(chan struct{}),
 	}
+
+	go m.cleaner();
 
 	return m
 }
@@ -49,8 +57,12 @@ func (m *SessionManager) CreateSession() (string, error) {
 		return "", err
 	}
 
+	m.mu.Lock();
+	defer m.mu.Unlock();
+
 	m.sessions[sessionID] = Session{
 		Data: make(map[string]interface{}),
+		LastAccessTime: time.Now(),
 	}
 
 	return sessionID, nil
@@ -63,26 +75,62 @@ var ErrSessionNotFound = errors.New("SessionID does not exists")
 // GetSessionData returns data related to session if sessionID is
 // found, errors otherwise
 func (m *SessionManager) GetSessionData(sessionID string) (map[string]interface{}, error) {
+	m.mu.RLock();
 	session, ok := m.sessions[sessionID]
+	m.mu.RUnlock();
+
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
+
 	return session.Data, nil
 }
 
 // UpdateSessionData overwrites the old session data with the new one
 func (m *SessionManager) UpdateSessionData(sessionID string, data map[string]interface{}) error {
-	_, ok := m.sessions[sessionID]
+	m.mu.Lock();
+	defer m.mu.Unlock();
+
+	session, ok := m.sessions[sessionID]
 	if !ok {
 		return ErrSessionNotFound
 	}
 
-	// Hint: you should renew expiry of the session here
-	m.sessions[sessionID] = Session{
-		Data: data,
-	}
+	session.Data = data;
+	session.LastAccessTime = time.Now();
+	m.sessions[sessionID] = session;
 
 	return nil
+}
+
+func (m *SessionManager) cleaner() {
+	ticker := time.NewTicker(1 * time.Second);
+	defer ticker.Stop();
+
+	for {
+		select {
+		case <-ticker.C:
+			m.cleanExpiredSessions();
+		case <-m.stopChan:
+			return;
+		}
+	}
+}
+
+func (m *SessionManager) cleanExpiredSessions() {
+	m.mu.Lock();
+	defer m.mu.Unlock();
+
+	currentTime := time.Now();
+	for sessionId, session := range m.sessions {
+		if currentTime.Sub(session.LastAccessTime) > 5 * time.Second {
+			delete(m.sessions, sessionId);
+		}
+	}
+}
+
+func (m *SessionManager) StopCleaner() {
+	close(m.stopChan);
 }
 
 func main() {
